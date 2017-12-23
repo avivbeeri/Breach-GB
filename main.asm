@@ -1,5 +1,20 @@
 INCLUDE "gbhw.inc" ; standard hardware definitions from devrs.com
 INCLUDE "ibmpc1.inc" ; ASCII character set from devrs.com
+INCLUDE "wram.asm"
+
+
+; RST Routines
+SECTION "mem_copy", ROM0[$0028]
+; hl - source address
+; de - destination address
+; bc - length
+mem_copy: 
+    ldi a, [hl]
+	ld [de], a
+    inc de
+	dec b
+	jr nz, mem_copy
+	ret
 
 ; IRQs
 SECTION  "Vblank",ROM0[$0040]
@@ -24,7 +39,7 @@ SECTION  "start",ROM0[$0100]
 	; ROM HEADER and ASCII character set
 	; ****************************************************************************************
 	; ROM header
-	ROM_HEADER  ROM_NOMBC, ROM_SIZE_32KBYTE, RAM_SIZE_0KBYTE
+header:	ROM_HEADER  ROM_NOMBC, ROM_SIZE_32KBYTE, RAM_SIZE_0KBYTE
 
 
 	; ****************************************************************************************
@@ -33,12 +48,28 @@ SECTION  "start",ROM0[$0100]
 	; copy the ASCII character table, clear the screen
 	; ****************************************************************************************
 init:
-	nop
-	di
-wait: 
+    nop
+	di ; Disable interrupts
+    ld  sp, $ffff ; Initialise the stack pointer
+
+    ; Display configuration
+    ld  a, %11100100     ; Window palette colors, from darkest to lightest
+    ld  [rBGP], a        ; set background and window pallette
+	ldh  [rOBP0],a       ; set sprite pallette 0 (choose palette 0 or 1 when describing the sprite)
+	ldh  [rOBP1],a       ; set sprite pallette 1
+
+    ld a, 0
+	ld  [rSCX], a
+	ld  [rSCY], a
+game_loop: 
+    ld hl, $0134
+    ld de, $DD00
+    ld b, 16
+    rst $28
     halt
-    jp init
+    jp game_loop
 
 SECTION "memory",ROM0
 test_string: ; $150 - $15B
   DB "Hello world!"
+
