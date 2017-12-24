@@ -7,7 +7,7 @@ HRAM_DMACOPY EQU $FF80
 ; RST Routines
 ; IRQs
 SECTION  "Vblank",ROM0[$0040]
-    reti ; jp  DMACODELOC ; *hs* update sprites every time the Vblank interrupt is called (~60Hz)
+    jp HRAM_DMACOPY
 SECTION  "LCDC",ROM0[$0048]
     reti
 SECTION  "Timer_Overflow",ROM0[$0050]
@@ -38,8 +38,18 @@ SECTION  "start",ROM0[$0100]
 	; ****************************************************************************************
 init:
     nop
-	di ; Disable interrupts
     ld  sp, $ffff ; Initialise the stack pointer
+
+    ; Copy dmacopy routine into HRAM
+    ld hl, DMACOPY
+    ld de, HRAM_DMACOPY
+    ld bc, 12
+    call memcpy
+
+    ; Set the Interrupt Enable flag so we respond only to VBlank interrupts
+    ld a, IEF_VBLANK
+    ld [rIE], a
+    ei
 
     ; Display configuration
     ld  a, %11100100     ; Window palette colors, from darkest to lightest
@@ -51,6 +61,7 @@ init:
 	ld  [rSCX], a
 	ld  [rSCY], a
 
+
     call wait_vram_available
 
     ; Turn off the display
@@ -59,11 +70,6 @@ init:
 	res 7, a; Clear bit-7 of a to 0.
 	ld [rLCDC], a
 
-    ; Copy dmacopy routine into HRAM
-    ld hl, DMACOPY
-    ld de, HRAM_DMACOPY
-    ld bc, 12
-    call memcpy
 
     ; clear OAM table
     ld a, 0
@@ -112,9 +118,9 @@ init:
     ; rst $28
 
 game_loop: 
-    call wait_vblank_begin
-    call HRAM_DMACOPY
-
+    ; call wait_vblank_begin
+    halt
+    nop
     jp game_loop
 
 ; This routine only returns when LY is 144 to give the caller the
@@ -230,7 +236,7 @@ DMACOPY:
 	dec     a
 	jr      nz, .loop
     pop af
-	ret
+	reti
 
 SECTION "memory",ROM0
 test_string: DB "Hello world!"
