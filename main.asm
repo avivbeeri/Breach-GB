@@ -40,6 +40,7 @@ init:
     nop
     ld  sp, $ffff ; Initialise the stack pointer
 
+    ; --------- DMA and OAM Setup ---------- 
     ; Copy dmacopy routine into HRAM
     ld hl, DMACOPY
     ld de, HRAM_DMACOPY
@@ -50,8 +51,9 @@ init:
     ld a, IEF_VBLANK
     ld [rIE], a
     ei
+    ; --------- End DMA and OAM ------------
 
-    ; Display configuration
+    ; LCD Display configuration
     ld  a, %11100100     ; Window palette colors, from darkest to lightest
     ld  [rBGP], a        ; set background and window pallette
 	ldh  [rOBP0],a       ; set sprite pallette 0 (choose palette 0 or 1 when describing the sprite)
@@ -61,8 +63,8 @@ init:
 	ld  [rSCX], a
 	ld  [rSCY], a
 
-
-    call wait_vram_available
+    ; Nintendo Guidelines demand that we wait for vblank before turning off the display
+    call wait_vblank_begin
 
     ; Turn off the display
     ; rLY = FF44
@@ -85,19 +87,26 @@ init:
     ld bc, 256 * 8
     call tile_copy_monochrome
 
+    ld a, 32    ; ASCII FOR BLANK SPACE
+    ld hl, _SCRN0
+    ld bc, SCRN_VX_B * SCRN_VY_B
+    call memset_vram
 
     ; Write a sprite into Shadow OAM
     ld a, 16
     ld hl, _RAM
     ld [hl], a
+
     ld a, 08
     ld hl, _RAM + 1
     ld [hl], a
+
     ld a, 01
     ld hl, _RAM + 2
     ld [hl], a
-    ld hl, _RAM + 3
+
     ld a, %01000000
+    ld hl, _RAM + 3
     ld [hl], a
 
 
@@ -106,10 +115,6 @@ init:
     ld  [rLCDC], a
 
     call wait_vram_available
-    ld a, 32    ; ASCII FOR BLANK SPACE
-    ld hl, _SCRN0
-    ld bc, SCRN_VX_B * SCRN_VY_B
-    call memset_vram
 
     ; Write the game name to memory... just because
     ; ld hl, $0134
@@ -121,7 +126,50 @@ game_loop:
     ; call wait_vblank_begin
     halt
     nop
+
+    call get_keys
+    jr z, game_loop
+    and %10000001
+    jr z, game_loop
+    ld hl, _RAM
+    ld a, [hl]
+    add a, 1
+    ld [hl], a
+    
     jp game_loop
+
+
+
+; Retrieves the state of the buttons as a single byte
+; Result is left in register A
+get_keys:
+    ld a, P1F_5 ; Set bit 5 of P1, so we can read the D-Pad
+    ld [rP1], a
+
+    ; Wait a couple of cycles for debouncing
+	ld   a,[rP1]
+	ld   a,[rP1] 
+	cpl ; Button logic is reversed so we use the compliment.
+
+    and $0F  ; Ignore the high bits
+    swap a ; Set bits to be high (7-4 <-> 3-0)
+    ld b, a ; Store result in b
+
+    ld a, P1F_4 ; Set bit 5 of P1, so we can read Start/Select/B/A
+    ld [rP1], a
+
+    ; Wait a couple of cycles for debouncing
+	ld   a,[rP1]
+	ld   a,[rP1] 
+	ld   a,[rP1] 
+	ld   a,[rP1] 
+	ld   a,[rP1] 
+	ld   a,[rP1] 
+	cpl ; Button logic is reversed so we use the compliment.
+
+    and $0F  ; Ignore the high bits
+    or b
+    ret
 
 ; This routine only returns when LY is 144 to give the caller the
 ; largest window of time before leaving the V-Blank period.
@@ -131,6 +179,7 @@ wait_vram_available:
 	and STATF_BUSY           ; 8 cycles
 	jr nz, wait_vram_available ; 8 cycles
 	ret
+
 
 wait_vblank_begin:
     ld a, [rLY]             ; 12 Cycles
