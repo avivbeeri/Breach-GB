@@ -114,13 +114,23 @@ init:
     ld  a, LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON ; *hs* see gbspec.txt lines 1525-1565 and gbhw.inc lines 70-86
     ld  [rLCDC], a
 
-    call wait_vram_available
+    call wait_vblank_begin
 
     ; Write the game name to memory... just because
     ; ld hl, $0134
     ; ld de, $DD00
     ; ld b, 16
     ; rst $28
+    ld a, 15
+    ld b, a
+    ld a, 15
+    ld c, a
+    call get_xy_address
+    ld a, 2
+    ld [hl], a
+    
+    ; b = y pos
+    ; c = x pos
 
 game_loop: 
     ; call wait_vblank_begin
@@ -170,6 +180,35 @@ get_keys:
     and $0F  ; Ignore the high bits
     or b
     ret
+
+get_xy_address:
+    ; b = y pos
+    ; c = x pos
+
+
+    swap b ; multiply by $10
+	ld a, b 
+	and $0F
+	ld h, a
+	ld a, b
+	and $F0
+    ld l, a
+    add hl, hl ; Multiply by $02, completing the *32
+    ; Now we need to add c to 32*b to get our final memory address
+    ld a, l
+	add a, c ; Add c. If it overflows our low 8-bit, increment high. 
+	jr nc, .noCarry
+	inc h
+.noCarry:
+    ; Add start of VRAM address to HL
+	add a, LOW(_SCRN0)
+    ld l, a
+    ld a, h 
+	adc a, HIGH(_SCRN0)
+    ; sub l
+	ld h, a
+	ret
+
 
 ; This routine only returns when LY is 144 to give the caller the
 ; largest window of time before leaving the V-Blank period.
