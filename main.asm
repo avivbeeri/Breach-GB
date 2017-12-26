@@ -105,7 +105,7 @@ init:
     ld hl, _RAM + 2
     ld [hl], a
 
-    ld a, %01000000
+    ld a, %11000000
     ld hl, _RAM + 3
     ld [hl], a
 
@@ -121,9 +121,9 @@ init:
     ; ld de, $DD00
     ; ld b, 16
     ; rst $28
-    ld a, 15
+    ld a, 3
     ld b, a
-    ld a, 15
+    ld a, $20
     ld c, a
     call get_xy_address
     ld a, 2
@@ -184,31 +184,29 @@ get_keys:
 get_xy_address:
     ; b = y pos
     ; c = x pos
+    ; Thanks to ISSOtm
 
 
     swap b ; multiply by $10
 	ld a, b 
+
 	and $0F
 	ld h, a
 	ld a, b
 	and $F0
     ld l, a
-    add hl, hl ; Multiply by $02, completing the *32
-    ; Now we need to add c to 32*b to get our final memory address
-    ld a, l
-	add a, c ; Add c. If it overflows our low 8-bit, increment high. 
-	jr nc, .noCarry
-	inc h
-.noCarry:
-    ; Add start of VRAM address to HL
-	add a, LOW(_SCRN0)
+    add hl, hl ; Multiply by $02, completing the vertical*32 operation
+
+    ; Add c (horizontal) to 32*b to get our final memory index
+    ld a, c
+    and $1F ; Fix screenwrapping for c >= $20
+	add a, l ; Add l to c
     ld l, a
+    ; We need to add our memory index to the start of background tile table to get VRAM address
     ld a, h 
-	adc a, HIGH(_SCRN0)
-    ; sub l
+	add a, HIGH(_SCRN0)
 	ld h, a
 	ret
-
 
 ; This routine only returns when LY is 144 to give the caller the
 ; largest window of time before leaving the V-Blank period.
